@@ -80,6 +80,20 @@ function BoardPath() {
   }))}</group>
 }
 
+const particlePoints: Array<[number, number, number]> = [
+  [-3.2, 0.35, -1.3], [3.1, 0.5, -1.4], [-3.4, 0.28, 1.35], [3.25, 0.42, 1.2],
+  [-2.1, 0.58, 0.1], [2.2, 0.38, -0.1], [-4.15, 0.7, 0.2], [4.1, 0.52, 0.5],
+  [-1.1, 0.42, 1.8], [1.2, 0.65, -1.8],
+]
+
+function DataParticles() {
+  const particlesRef = useRef<Mesh>(null)
+  useFrame((_, delta) => {
+    if (particlesRef.current) particlesRef.current.rotation.y += delta * 0.025
+  })
+  return <group ref={particlesRef}>{particlePoints.map(([x, y, z], index) => <mesh key={index} position={[x, y, z]}><sphereGeometry args={[0.018 + (index % 3) * 0.006, 5, 5]} /><meshBasicMaterial color="#7f8d5b" transparent opacity={0.24} /></mesh>)}</group>
+}
+
 function CentralWorkspace() {
   return <group position={[0, 0.09, 0]}>
     <pointLight position={[0, 1.5, 0.1]} intensity={1.15} distance={4.2} color="#c2ae60" />
@@ -124,6 +138,7 @@ function Board({ tileIndex, hoveredTile, onHover, mouse }: { tileIndex: number; 
     <FlatPrint position={[0, 0.005, 0]} size={[10.05, 5.65]} color="#263328" />
     <BoardPath />
     <CentralWorkspace />
+    <DataParticles />
     {boardTiles.map((tile, index) => <BoardTile key={tile.id} tile={tile} active={index === tileIndex} hovered={tile.id === hoveredTile} onHover={onHover} />)}
     <FollowCamera tileIndex={tileIndex} mouse={mouse} />
   </>
@@ -155,6 +170,7 @@ function App() {
   const [commandValue, setCommandValue] = useState('')
   const [commandHistory, setCommandHistory] = useState<string[]>([])
   const [hoveredTile, setHoveredTile] = useState<string | null>(null)
+  const [startPulse, setStartPulse] = useState(false)
   const commandInputRef = useRef<HTMLInputElement>(null)
   const mouseRef = useRef({ x: 0, y: 0 })
   const currentTile = boardTiles[tileIndex]
@@ -245,7 +261,14 @@ function App() {
         return
       }
       if (worldOpen) return
-      if (event.key === 'Enter') { accessWorld(); return }
+      if (event.key === 'Enter') {
+        if (currentTile.id === 'start') {
+          setStartPulse(true)
+          window.setTimeout(() => setStartPulse(false), 700)
+        }
+        accessWorld()
+        return
+      }
       if (moving) return
       const direction = directionForKey(event.key.toLowerCase())
       if (!direction) return
@@ -271,13 +294,14 @@ function App() {
     <header className="topbar"><span className="signal-dot" /><span>SYSTEM // AKSHAYA_PORTFOLIO</span><span className="topbar-status">BUILD 01.09 // ONLINE</span></header>
     <section className="world-frame">
       <Canvas shadows dpr={[1, 1.75]} gl={{ antialias: true }}>{worldOpen ? <PlaceholderWorld /> : <Board tileIndex={tileIndex} hoveredTile={hoveredTile} onHover={setHoveredTile} mouse={mouseRef} />}</Canvas>
-      <div className="scanlines" />
+      <div className="scanlines" /><div className="scan-sweep" />
       {(booting || transitioning) && <div className={`system-overlay transition-${transitionKind ?? 'world'}${bootFading ? ' boot-fading' : ''}`}><div>{booting ? 'AKSHAYA_OS v1.0' : transitionMessage}</div><div>------------------------------</div><div>{booting ? <>{bootStage}<br /><br /><span className="boot-bar">[{'█'.repeat(filledBlocks)}{'░'.repeat(progressBlocks - filledBlocks)}] {Math.round(bootProgress)}%</span><br /><br />{bootProgress > 95 ? '&gt; SYSTEM ONLINE' : 'AKSHAYA_OS // SYSTEM INITIALIZING'}</> : 'VERIFYING MODULE_\n................. OK\n\nLOADING WORLD_\n████████████████ 100%\n\n&gt; CONNECTION ESTABLISHED_'}</div></div>}
       <div className="coordinates">{worldOpen ? 'SUBWORLD / MEMORY BUFFER' : `SECTOR ${String(tileIndex + 1).padStart(2, '0')} / GRID ${String(100 + tileIndex).padStart(3, '0')}`}<br />LOCAL TIME 03:17</div>
       <div className="world-label">{worldOpen ? `${currentTile.name} // WORLD` : "AKSHAYA'S"}<br /><span>{worldOpen ? 'PLACEHOLDER SCENE' : 'JOURNEY BOARD'}</span></div>
+      {!worldOpen && <div className="system-telemetry"><span>SYSTEM TELEMETRY</span><b>----------------</b><span>NODES&nbsp;&nbsp;&nbsp;&nbsp;{boardTiles.length}</span><span>ACTIVE&nbsp;&nbsp;&nbsp;01</span><span>LINK&nbsp;&nbsp;&nbsp;&nbsp;STABLE</span><span>SYNC&nbsp;&nbsp;&nbsp;&nbsp;100%</span></div>}
     </section>
     <footer className="command-panel">
-      <div className="panel-heading"><span>LOCATION: {currentTile.name}</span><span>STATUS: <strong>{worldOpen ? 'EXPLORING' : transitioning ? 'LOADING' : 'STABLE'}</strong></span></div>
+      <div className="panel-heading"><span>LOCATION: {currentTile.name}</span><span>STATUS: <strong>{worldOpen ? 'EXPLORING' : transitioning ? 'LOADING' : startPulse ? 'INITIALIZING' : 'STABLE'}</strong></span></div>
       <div className="station-readout"><div className="readout-title">&gt; {worldOpen ? `${currentTile.name} // PLACEHOLDER WORLD` : entry.kind}</div><div className="readout-detail">{worldOpen ? 'A temporary room has been loaded for this destination. Press ESC to return._' : `${entry.detail} ${entry.action}`}</div>{commandHistory.map((line) => <div key={line} className="command-history">{line}</div>)}</div>
       <div className="controls"><span><kbd>ENTER</kbd> {worldOpen ? 'UNAVAILABLE' : entry.action.replace('[ENTER] ', '')}</span><span><kbd>ESC</kbd> {worldOpen ? 'RETURN' : 'RESET'}</span><span><kbd>↑ ↓ ← →</kbd> MOVE</span><span><kbd>/</kbd> COMMAND</span></div>
       {commandOpen && <form className="terminal-command" onSubmit={(event) => { event.preventDefault(); executeCommand(commandValue) }}><label>AKSHAYA_OS &gt;</label><input ref={commandInputRef} value={commandValue} onChange={(event) => setCommandValue(event.target.value)} onBlur={() => setCommandOpen(false)} aria-label="AKSHAYA OS command" autoComplete="off" /></form>}
