@@ -1,11 +1,25 @@
 import { Canvas, useFrame } from '@react-three/fiber'
 import { Html, OrthographicCamera, Text } from '@react-three/drei'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { MutableRefObject } from 'react'
+import type { MutableRefObject, PointerEvent } from 'react'
 import type { Mesh } from 'three'
 import mono400 from '@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-400-normal.woff'
 import { commandNames, portfolioEntries } from './portfolioData'
 import './App.css'
+
+function useViewportWidth() {
+  const [width, setWidth] = useState(
+    typeof window !== 'undefined' ? window.innerWidth : 1200
+  )
+
+  useEffect(() => {
+    const handleResize = () => setWidth(window.innerWidth)
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
+  return width
+}
 
 type TileType = 'start' | 'normal' | 'destination' | 'end'
 type Direction = 'up' | 'down' | 'left' | 'right'
@@ -130,10 +144,14 @@ function FollowCamera({ tileIndex, mouse }: { tileIndex: number; mouse: MutableR
 }
 
 function Board({ tileIndex, hoveredTile, onHover, mouse }: { tileIndex: number; hoveredTile: string | null; onHover: (id: string | null) => void; mouse: MutableRefObject<{ x: number; y: number }> }) {
+  const viewportWidth = useViewportWidth()
+  const mobile = viewportWidth <= 700
+  const cameraZoom = viewportWidth <= 420 ? 34 : mobile ? 38 : 58
+
   return <>
     <ambientLight intensity={0.7} color="#a5a78e" />
     <directionalLight position={[-5, 8, 4]} intensity={1.7} color="#d2c89b" castShadow shadow-mapSize={[1024, 1024]} />
-    <OrthographicCamera makeDefault position={[5.4, 8.1, 6.8]} zoom={58} />
+    <OrthographicCamera makeDefault position={[5.4, 8.1, 6.8]} zoom={cameraZoom} />
     <mesh position={[0, -0.24, 0]} receiveShadow><boxGeometry args={[10.4, 0.46, 6]} /><meshStandardMaterial color="#10150f" roughness={1} /></mesh>
     <FlatPrint position={[0, 0.005, 0]} size={[10.05, 5.65]} color="#263328" />
     <BoardPath />
@@ -154,6 +172,82 @@ function directionForKey(key: string): Direction | null {
   if (key === 'arrowleft' || key === 'a') return 'left'
   if (key === 'arrowright' || key === 'd') return 'right'
   return null
+}
+function MobileControls() {
+  const sendKey = (key: string) => {
+    window.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key,
+        bubbles: true,
+      })
+    )
+  }
+
+  const handleTouch = (key: string) => (event: PointerEvent<HTMLButtonElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    sendKey(key)
+  }
+
+  return (
+    <div className="mobile-controls" aria-label="Mobile navigation controls">
+      <div className="mobile-dpad">
+        <button
+          type="button"
+          className="mobile-btn up"
+          onPointerDown={handleTouch('ArrowUp')}
+          aria-label="Move up"
+        >
+          ↑
+        </button>
+
+        <button
+          type="button"
+          className="mobile-btn left"
+          onPointerDown={handleTouch('ArrowLeft')}
+          aria-label="Move left"
+        >
+          ←
+        </button>
+
+        <button
+          type="button"
+          className="mobile-btn down"
+          onPointerDown={handleTouch('ArrowDown')}
+          aria-label="Move down"
+        >
+          ↓
+        </button>
+
+        <button
+          type="button"
+          className="mobile-btn right"
+          onPointerDown={handleTouch('ArrowRight')}
+          aria-label="Move right"
+        >
+          →
+        </button>
+      </div>
+
+      <div className="mobile-actions">
+        <button
+          type="button"
+          className="mobile-action"
+          onPointerDown={handleTouch('Enter')}
+        >
+          ENTER
+        </button>
+
+        <button
+          type="button"
+          className="mobile-action"
+          onPointerDown={handleTouch('Escape')}
+        >
+          RESET
+        </button>
+      </div>
+    </div>
+  )
 }
 
 function App() {
@@ -295,6 +389,7 @@ function App() {
     <section className="world-frame">
       <Canvas shadows dpr={[1, 1.75]} gl={{ antialias: true }}>{worldOpen ? <PlaceholderWorld /> : <Board tileIndex={tileIndex} hoveredTile={hoveredTile} onHover={setHoveredTile} mouse={mouseRef} />}</Canvas>
       <div className="scanlines" /><div className="scan-sweep" />
+      <MobileControls />
       {(booting || transitioning) && <div className={`system-overlay transition-${transitionKind ?? 'world'}${bootFading ? ' boot-fading' : ''}`}><div>{booting ? 'AKSHAYA_OS v1.0' : transitionMessage}</div><div>------------------------------</div><div>{booting ? <>{bootStage}<br /><br /><span className="boot-bar">[{'█'.repeat(filledBlocks)}{'░'.repeat(progressBlocks - filledBlocks)}] {Math.round(bootProgress)}%</span><br /><br />{bootProgress > 95 ? '&gt; SYSTEM ONLINE' : 'AKSHAYA_OS // SYSTEM INITIALIZING'}</> : 'VERIFYING MODULE_\n................. OK\n\nLOADING WORLD_\n████████████████ 100%\n\n&gt; CONNECTION ESTABLISHED_'}</div></div>}
       <div className="coordinates">{worldOpen ? 'SUBWORLD / MEMORY BUFFER' : `SECTOR ${String(tileIndex + 1).padStart(2, '0')} / GRID ${String(100 + tileIndex).padStart(3, '0')}`}<br />LOCAL TIME 03:17</div>
       <div className="world-label">{worldOpen ? `${currentTile.name} // WORLD` : "AKSHAYA'S"}<br /><span>{worldOpen ? 'PLACEHOLDER SCENE' : 'JOURNEY BOARD'}</span></div>
